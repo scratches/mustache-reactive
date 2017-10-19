@@ -75,6 +75,7 @@ public class FluxWriter extends Writer {
 	@Override
 	public void close() throws IOException {
 		flush();
+		emitter.onComplete();
 	}
 
 	public void release() {
