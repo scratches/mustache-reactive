@@ -36,6 +36,7 @@ class LayoutAdvice {
 				if (frag.context() instanceof Map) {
 					@SuppressWarnings("unchecked")
 					Map<String, Object> context = (Map<String, Object>) frag.context();
+
 					fluxWriter.write(context.get(key));
 				}
 			}

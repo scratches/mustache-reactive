@@ -4,8 +4,6 @@ import java.time.Duration;
 
 import com.samskivert.mustache.Mustache.Compiler;
 
-import org.reactivestreams.Publisher;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -32,9 +30,10 @@ public class TestApplication {
 
 	@GetMapping("/")
 	@ResponseBody
-	Mono<Void> home(Model model, ServerWebExchange exchange)
-			throws Exception {
-		model.addAttribute("value", FluxWriter.wrap(Flux.just("Hello").delayElements(Duration.ofSeconds(1))));
+	Mono<Void> home(Model model, ServerWebExchange exchange) throws Exception {
+		model.addAttribute("value",
+				FluxWriter.wrap(Flux.just("<h2>Demo</h2>", "<span>Hello</span>")
+						.delayElements(Duration.ofSeconds(1))));
 		ReactiveMustacheView view = new ReactiveMustacheView();
 		view.setApplicationContext(context);
 		view.setCompiler(compiler);
@@ -45,18 +44,17 @@ public class TestApplication {
 
 	@GetMapping("/flux")
 	@ResponseBody
-	Mono<Void> flux(ServerWebExchange exchange)
-			throws Exception {
-		return exchange.getResponse().writeAndFlushWith(Flux
-				.just("<html>\n<body>\n", "<h2>Demo</h2>", "<span>Hello</span>\n",
-						"</body></html>\n")
-				.delayElements(Duration.ofSeconds(1))
-				.map(body -> buffer(exchange, body)));
+	Mono<Void> flux(ServerWebExchange exchange) throws Exception {
+		return exchange.getResponse()
+				.writeAndFlushWith(Flux
+						.just("<html>\n<body>\n", "<h2>Demo</h2>", "<span>Hello</span>\n",
+								"</body></html>\n")
+						.delayElements(Duration.ofSeconds(1))
+						.map(body -> Mono.just(buffer(exchange).write(body.getBytes()))));
 	}
 
-	private Publisher<DataBuffer> buffer(ServerWebExchange exchange, String body) {
-		return Mono.just(exchange.getResponse().bufferFactory().allocateBuffer()
-				.write(body.getBytes()));
+	private DataBuffer buffer(ServerWebExchange exchange) {
+		return exchange.getResponse().bufferFactory().allocateBuffer();
 	}
 
 	public static void main(String[] args) {
