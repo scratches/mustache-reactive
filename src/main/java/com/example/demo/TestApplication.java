@@ -4,6 +4,8 @@ import java.time.Duration;
 
 import com.samskivert.mustache.Mustache.Compiler;
 
+import org.reactivestreams.Publisher;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -51,6 +53,20 @@ public class TestApplication {
 								"</body></html>\n")
 						.delayElements(Duration.ofSeconds(1))
 						.map(body -> Mono.just(buffer(exchange).write(body.getBytes()))));
+	}
+
+	@GetMapping("/nested")
+	@ResponseBody
+	Mono<Void> nested(ServerWebExchange exchange) throws Exception {
+		return exchange.getResponse()
+				.writeAndFlushWith(Flux
+						.just(Mono.just("<html>\n<body>\n"), Flux.just("<h2>Demo</h2>\n", "<span>Hello</span>\n"),
+								Mono.just("</body></html>\n"))
+						.map(body -> write(buffer(exchange), body)));
+	}
+	
+	private Publisher<DataBuffer> write(DataBuffer buffer, Publisher<String> input) {
+		return Flux.from(input).map(body -> buffer.write(body.getBytes()));
 	}
 
 	private DataBuffer buffer(ServerWebExchange exchange) {

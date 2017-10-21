@@ -86,9 +86,8 @@ public class FluxWriter extends Writer {
 	public void write(Object object) {
 		if (object instanceof Wrapper) {
 			Wrapper publisher = (Wrapper) object;
-			DataBuffer buffer = this.factory.allocateBuffer();
 			emitter.onNext(Flux.from(publisher.publisher)
-					.map(string -> buffer.write(string.getBytes(this.charset))));
+					.map(string -> this.factory.allocateBuffer().write(string.getBytes(this.charset))));
 		}
 	}
 
