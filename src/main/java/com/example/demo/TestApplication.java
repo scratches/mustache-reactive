@@ -58,15 +58,12 @@ public class TestApplication {
 	@GetMapping("/nested")
 	@ResponseBody
 	Mono<Void> nested(ServerWebExchange exchange) throws Exception {
-		return exchange.getResponse()
-				.writeAndFlushWith(Flux
-						.just(Mono.just("<html>\n<body>\n"), Flux.just("<h2>Demo</h2>\n", "<span>Hello</span>\n"),
-								Mono.just("</body></html>\n"))
-						.map(body -> write(buffer(exchange), body)));
-	}
-	
-	private Publisher<DataBuffer> write(DataBuffer buffer, Publisher<String> input) {
-		return Flux.from(input).map(body -> buffer.write(body.getBytes()));
+		return exchange.getResponse().writeAndFlushWith(Flux
+				.just(Mono.just("<html>\n<body>\n"),
+						Flux.just("<h2>Demo</h2>\n", "<span>Hello</span>\n"),
+						Mono.just("</body></html>\n"))
+				.delayElements(Duration.ofSeconds(1)).map(body -> Flux.from(body)
+						.map(content -> buffer(exchange).write(content.getBytes()))));
 	}
 
 	private DataBuffer buffer(ServerWebExchange exchange) {
