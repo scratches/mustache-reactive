@@ -84,29 +84,16 @@ public class FluxWriter extends Writer {
 	}
 
 	public void write(Object object) {
-		if (object instanceof Wrapper) {
-			Wrapper publisher = (Wrapper) object;
-			emitter.onNext(Flux.from(publisher.publisher)
+		if (object instanceof Publisher) {
+			@SuppressWarnings("unchecked")
+			Publisher<String> publisher = (Publisher<String>) object;
+			emitter.onNext(Flux.from(publisher)
 					.map(string -> buffer().write(string.getBytes(this.charset))));
 		}
 	}
 
 	private DataBuffer buffer() {
 		return this.factory.allocateBuffer();
-	}
-
-	public static Wrapper wrap(Publisher<String> publisher) {
-		return new Wrapper(publisher);
-	}
-
-	static class Wrapper {
-
-		private Publisher<String> publisher;
-
-		public Wrapper(Publisher<String> publisher) {
-			this.publisher = publisher;
-		}
-
 	}
 
 }

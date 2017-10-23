@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.Charset;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -94,6 +95,17 @@ public class ReactiveMustacheView extends AbstractUrlBasedView {
 		catch (Exception ex) {
 			return Mono.error(ex);
 		}
+	}
+	
+	@Override
+	protected Mono<Void> resolveAsyncAttributes(Map<String, Object> model) {
+		Map<String, Object> result = new HashMap<>();
+		for (String key : model.keySet()) {
+			if (!key.startsWith("flux") && !key.startsWith("mono") && !key.startsWith("publisher")) {
+				result.put(key, model.get(key));
+			}
+		}
+		return super.resolveAsyncAttributes(result).doOnSuccess(v -> model.putAll(result));
 	}
 
 	private Resource resolveResource() {

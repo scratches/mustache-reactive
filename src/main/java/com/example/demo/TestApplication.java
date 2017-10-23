@@ -31,9 +31,8 @@ public class TestApplication {
 	@GetMapping("/")
 	@ResponseBody
 	Mono<Void> home(Model model, ServerWebExchange exchange) throws Exception {
-		model.addAttribute("value",
-				FluxWriter.wrap(Flux.just("<h2>Demo</h2>", "<span>Hello</span>")
-						.delayElements(Duration.ofSeconds(1))));
+		model.addAttribute("fluxValue", Flux.just("<h2>Demo</h2>\n", "<span>Hello</span>")
+				.delayElements(Duration.ofSeconds(1)));
 		ReactiveMustacheView view = new ReactiveMustacheView();
 		view.setApplicationContext(context);
 		view.setCompiler(compiler);
@@ -45,23 +44,25 @@ public class TestApplication {
 	@GetMapping("/flux")
 	@ResponseBody
 	Mono<Void> flux(ServerWebExchange exchange) throws Exception {
-		return exchange.getResponse()
-				.writeAndFlushWith(Flux
-						.just("<html>\n<body>\n", "<h2>Demo</h2>", "<span>Hello</span>\n",
-								"</body></html>\n")
-						.delayElements(Duration.ofSeconds(1))
-						.map(body -> Mono.just(buffer(exchange).write(body.getBytes()))));
+		return exchange.getResponse().writeAndFlushWith(Flux
+				.just("<html>\n<body>\n", "<h2>Demo</h2>\n", "<span>Hello</span>\n",
+						"</body></html>\n")
+				.delayElements(Duration.ofSeconds(1))
+				.map(body -> Mono.just(buffer(exchange).write(body.getBytes()))));
 	}
 
 	@GetMapping("/nested")
 	@ResponseBody
 	Mono<Void> nested(ServerWebExchange exchange) throws Exception {
-		return exchange.getResponse().writeAndFlushWith(Flux
-				.just(Mono.just("<html>\n<body>\n"),
-						Flux.just("<h2>Demo</h2>\n", "<span>Hello</span>\n"),
-						Mono.just("</body></html>\n"))
-				.delayElements(Duration.ofSeconds(1)).map(body -> Flux.from(body)
-						.map(content -> buffer(exchange).write(content.getBytes()))));
+		return exchange.getResponse()
+				.writeAndFlushWith(Flux
+						.just(Mono.just("<html>\n<body>\n"),
+								Flux.just("<h2>Demo</h2>\n", "<span>Hello</span>\n")
+										.delayElements(Duration.ofSeconds(1)),
+								Mono.just("</body></html>\n"))
+						.flatMap(body -> Flux.from(body).map(
+								content -> buffer(exchange).write(content.getBytes())))
+						.map(buffer -> Mono.just(buffer)));
 	}
 
 	private DataBuffer buffer(ServerWebExchange exchange) {
