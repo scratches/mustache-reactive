@@ -33,9 +33,9 @@ import com.samskivert.mustache.Template.Fragment;
 
 import org.reactivestreams.Publisher;
 
+import org.springframework.boot.web.reactive.result.view.MustacheView;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
-import org.springframework.web.reactive.result.view.AbstractUrlBasedView;
 import org.springframework.web.reactive.result.view.View;
 import org.springframework.web.server.ServerWebExchange;
 
@@ -48,7 +48,7 @@ import reactor.core.publisher.Mono;
  * @author Brian Clozel
  * @since 2.0.0
  */
-public class ReactiveMustacheView extends AbstractUrlBasedView {
+public class ReactiveMustacheView extends MustacheView {
 
 	private Compiler compiler;
 
