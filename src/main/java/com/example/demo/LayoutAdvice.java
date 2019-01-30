@@ -33,10 +33,12 @@ class LayoutAdvice {
 				FluxWriter fluxWriter = (FluxWriter) out;
 				fluxWriter.flush();
 				String key = frag.decompile();
+				if (!key.startsWith("flux.")) {
+					key = "flux." + key;
+				}
 				if (frag.context() instanceof Map) {
 					@SuppressWarnings("unchecked")
 					Map<String, Object> context = (Map<String, Object>) frag.context();
-
 					fluxWriter.write(context.get(key));
 				}
 			}

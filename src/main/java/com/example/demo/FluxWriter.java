@@ -17,83 +17,69 @@
 package com.example.demo;
 
 import java.io.IOException;
-import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.Charset;
+import java.util.function.Supplier;
 
 import org.reactivestreams.Publisher;
 
 import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DataBufferFactory;
-import org.springframework.core.io.buffer.DataBufferUtils;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.UnicastProcessor;
 
 public class FluxWriter extends Writer {
 
-	private final DataBufferFactory factory;
+	private final Supplier<DataBuffer> factory;
 	private final Charset charset;
-	private final UnicastProcessor<Publisher<DataBuffer>> emitter;
-	private volatile OutputStreamWriter writer;
+	private Flux<String> buffers;
 
-	public FluxWriter(DataBufferFactory factory, Charset charset) {
+	public FluxWriter(Supplier<DataBuffer> factory) {
+		this(factory, Charset.defaultCharset());
+	}
+
+	public FluxWriter(Supplier<DataBuffer> factory, Charset charset) {
 		this.factory = factory;
 		this.charset = charset;
-		this.emitter = UnicastProcessor.<Publisher<DataBuffer>>create();
-		start();
+		this.buffers = Flux.empty();
 	}
 
-	private void start() {
-		if (this.writer == null) {
-			DataBuffer buffer = buffer();
-			this.writer = new OutputStreamWriter(buffer.asOutputStream(), this.charset);
-			this.emitter.onNext(Mono.just(buffer));
-		}
-	}
-
-	public Publisher<? extends Publisher<? extends DataBuffer>> getElements() {
-		return emitter;
+	public Publisher<? extends Publisher<? extends DataBuffer>> getBuffers() {
+		return this.buffers.map(buffer -> Mono.just(buffer().write(buffer, charset)));
 	}
 
 	@Override
 	public void write(char[] cbuf, int off, int len) throws IOException {
-		start();
-		this.writer.write(cbuf, off, len);
+		this.buffers = this.buffers.concatWith(Mono.just(new String(cbuf, off, len)));
 	}
 
 	@Override
 	public void flush() throws IOException {
-		if (writer != null) {
-			writer.flush();
-			writer.close();
-			writer = null;
-		}
 	}
 
 	@Override
 	public void close() throws IOException {
-		flush();
-		emitter.onComplete();
 	}
 
 	public void release() {
-		emitter.map(
-				p -> Flux.from(p).subscribe(buffer -> DataBufferUtils.release(buffer)));
-	}
-
-	public void write(Object object) {
-		if (object instanceof Publisher) {
-			@SuppressWarnings("unchecked")
-			Publisher<String> publisher = (Publisher<String>) object;
-			emitter.onNext(Flux.from(publisher)
-					.map(string -> buffer().write(string.getBytes(this.charset))));
-		}
+		// TODO: maybe implement this and call it on error
 	}
 
 	private DataBuffer buffer() {
-		return this.factory.allocateBuffer();
+		return this.factory.get();
+	}
+
+	public void write(Object thing) {
+		if (thing instanceof Publisher) {
+			@SuppressWarnings("unchecked")
+			Publisher<String> publisher = (Publisher<String>) thing;
+			this.buffers = this.buffers.concatWith(Flux.from(publisher));
+		}
+		else {
+			if (thing instanceof String) {
+				this.buffers = this.buffers.concatWith(Mono.just((String) thing));
+			}
+		}
 	}
 
 }

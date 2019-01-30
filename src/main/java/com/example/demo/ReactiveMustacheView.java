@@ -80,12 +80,12 @@ public class ReactiveMustacheView extends AbstractUrlBasedView {
 					"Could not find Mustache template with URL [" + getUrl() + "]"));
 		}
 		Charset charset = getCharset(contentType).orElse(getDefaultCharset());
-		try (FluxWriter writer = new FluxWriter(exchange.getResponse().bufferFactory(),
+		try (FluxWriter writer = new FluxWriter(() -> exchange.getResponse().bufferFactory().allocateBuffer(),
 				charset)) {
 			try (Reader reader = getReader(resource)) {
 				Template template = this.compiler.compile(reader);
 				template.execute(model, writer);
-				return exchange.getResponse().writeAndFlushWith(writer.getElements());
+				return exchange.getResponse().writeAndFlushWith(writer.getBuffers());
 			}
 			catch (Exception ex) {
 				writer.release();
