@@ -19,14 +19,19 @@ package com.example.demo;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.io.Writer;
 import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+import com.samskivert.mustache.Mustache;
 import com.samskivert.mustache.Mustache.Compiler;
 import com.samskivert.mustache.Template;
+import com.samskivert.mustache.Template.Fragment;
+
+import org.reactivestreams.Publisher;
 
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -34,6 +39,7 @@ import org.springframework.web.reactive.result.view.AbstractUrlBasedView;
 import org.springframework.web.reactive.result.view.View;
 import org.springframework.web.server.ServerWebExchange;
 
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -80,12 +86,13 @@ public class ReactiveMustacheView extends AbstractUrlBasedView {
 					"Could not find Mustache template with URL [" + getUrl() + "]"));
 		}
 		Charset charset = getCharset(contentType).orElse(getDefaultCharset());
-		try (FluxWriter writer = new FluxWriter(() -> exchange.getResponse().bufferFactory().allocateBuffer(),
-				charset)) {
+		try (FluxWriter writer = new FluxWriter(
+				() -> exchange.getResponse().bufferFactory().allocateBuffer(), charset)) {
 			try (Reader reader = getReader(resource)) {
 				Template template = this.compiler.compile(reader);
 				template.execute(model, writer);
-				return exchange.getResponse().writeAndFlushWith(writer.getBuffers());
+				return exchange.getResponse()
+						.writeAndFlushWith(Flux.from(writer.getBuffers()));
 			}
 			catch (Exception ex) {
 				writer.release();
@@ -96,16 +103,21 @@ public class ReactiveMustacheView extends AbstractUrlBasedView {
 			return Mono.error(ex);
 		}
 	}
-	
+
 	@Override
 	protected Mono<Void> resolveAsyncAttributes(Map<String, Object> model) {
 		Map<String, Object> result = new HashMap<>();
 		for (String key : model.keySet()) {
-			if (!key.startsWith("flux") && !key.startsWith("mono") && !key.startsWith("publisher")) {
+			if (!key.startsWith("flux") && !key.startsWith("mono")
+					&& !key.startsWith("publisher")) {
 				result.put(key, model.get(key));
 			}
+			else {
+				model.put(key, new FluxLambda((Publisher<?>) model.get(key)));
+			}
 		}
-		return super.resolveAsyncAttributes(result).doOnSuccess(v -> model.putAll(result));
+		return super.resolveAsyncAttributes(result)
+				.doOnSuccess(v -> model.putAll(result));
 	}
 
 	private Resource resolveResource() {
@@ -125,6 +137,25 @@ public class ReactiveMustacheView extends AbstractUrlBasedView {
 
 	private Optional<Charset> getCharset(MediaType mediaType) {
 		return Optional.ofNullable(mediaType != null ? mediaType.getCharset() : null);
+	}
+
+	private static class FluxLambda implements Mustache.Lambda {
+
+		private Publisher<?> publisher;
+
+		public FluxLambda(Publisher<?> publisher) {
+			this.publisher = publisher;
+		}
+
+		@Override
+		public void execute(Fragment frag, Writer out) throws IOException {
+			if (out instanceof FluxWriter) {
+				FluxWriter fluxWriter = (FluxWriter) out;
+				fluxWriter.flush();
+				fluxWriter.write(Flux.from(publisher).map(value -> frag.execute(value) + "\n"));
+			}
+		}
+
 	}
 
 }

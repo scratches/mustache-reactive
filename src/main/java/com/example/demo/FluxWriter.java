@@ -45,7 +45,7 @@ public class FluxWriter extends Writer {
 	}
 
 	public Publisher<? extends Publisher<? extends DataBuffer>> getBuffers() {
-		return this.buffers.map(buffer -> Mono.just(buffer().write(buffer, charset)));
+		return this.buffers.map(string -> Mono.just(buffer().write(string, charset)));
 	}
 
 	@Override

@@ -37,8 +37,23 @@ public class TestApplication {
 	Mono<Void> home(Model model, ServerWebExchange exchange) throws Exception {
 		model.addAttribute("flux.value", Flux.just("<h2>Demo</h2>\n", "<span>Hello</span>")
 				.delayElements(Duration.ofMillis(delay)));
-		model.addAttribute("flux.footer", Flux.just("<span>World</span>\n", "<span>Yay!</span>")
+		model.addAttribute("flux.footer", Flux.just("World", "Yay!")
 				.delayElements(Duration.ofMillis(delay)));
+		ReactiveMustacheView view = new ReactiveMustacheView();
+		view.setApplicationContext(context);
+		view.setCompiler(compiler);
+		view.setUrl("classpath:/templates/home.mustache");
+		view.afterPropertiesSet();
+		return view.render(model.asMap(), null, exchange);
+	}
+
+	@GetMapping("/bang")
+	@ResponseBody
+	Mono<Void> bang(Model model, ServerWebExchange exchange) throws Exception {
+		model.addAttribute("flux.value", Flux.just("<h2>Demo</h2>\n", "<span>Hello</span>")
+				.delayElements(Duration.ofMillis(delay)));
+		// Is it possible to get a 500 from this?
+		model.addAttribute("flux.footer", Flux.error(new RuntimeException("bang!")));
 		ReactiveMustacheView view = new ReactiveMustacheView();
 		view.setApplicationContext(context);
 		view.setCompiler(compiler);
@@ -53,6 +68,16 @@ public class TestApplication {
 		return exchange.getResponse().writeAndFlushWith(Flux
 				.just("<html>\n<body>\n", "<h2>Demo</h2>\n", "<span>Hello</span>\n",
 						"</body></html>\n")
+				.delayElements(Duration.ofMillis(delay))
+				.map(body -> Mono.just(buffer(exchange).write(body.getBytes()))));
+	}
+
+	@GetMapping("/bang/flux")
+	@ResponseBody
+	Mono<Void> bangflux(ServerWebExchange exchange) throws Exception {
+		return exchange.getResponse().writeAndFlushWith(Flux
+				.just("<html>\n<body>\n", "<h2>Demo</h2>\n", "<span>Hello</span>\n",
+						"</body></html>\n").concatWith(Mono.error(new RuntimeException("bang")))
 				.delayElements(Duration.ofMillis(delay))
 				.map(body -> Mono.just(buffer(exchange).write(body.getBytes()))));
 	}
