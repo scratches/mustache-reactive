@@ -1,9 +1,13 @@
 <html>
 	<body>
-	{{#flux.value}}{{{.}}}{{/flux.value}}
+	{{#flux.value}}
+	{{{.}}}
+	{{/flux.value}}
 	<span>...</span>
 	<ul>
-		{{#flux.footer}}<li>{{.}}</li>{{/flux.footer}}
+		{{#flux.footer}}
+		<li>{{.}}</li>
+		{{/flux.footer}}
 	</ul>
 	</body>
 </html>

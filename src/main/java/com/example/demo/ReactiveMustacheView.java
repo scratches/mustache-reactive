@@ -152,7 +152,7 @@ public class ReactiveMustacheView extends MustacheView {
 			if (out instanceof FluxWriter) {
 				FluxWriter fluxWriter = (FluxWriter) out;
 				fluxWriter.flush();
-				fluxWriter.write(Flux.from(publisher).map(value -> frag.execute(value) + "\n"));
+				fluxWriter.write(Flux.from(publisher).map(value -> frag.execute(value)));
 			}
 		}
 

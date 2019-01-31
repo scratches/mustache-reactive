@@ -34,7 +34,7 @@ public class TestApplication {
 	@GetMapping("/")
 	String home(Model model) throws Exception {
 		model.addAttribute("flux.value",
-				Flux.just("<h2>Demo</h2>\n", "<span>Hello</span>")
+				Flux.just("<h2>Demo</h2>", "<span>Hello</span>")
 						.delayElements(Duration.ofMillis(delay)));
 		model.addAttribute("flux.footer",
 				Flux.just("World", "Yay!").delayElements(Duration.ofMillis(delay)));
@@ -44,7 +44,7 @@ public class TestApplication {
 	@GetMapping("/bang")
 	String bang(Model model) throws Exception {
 		model.addAttribute("flux.value",
-				Flux.just("<h2>Demo</h2>\n", "<span>Hello</span>")
+				Flux.just("<h2>Demo</h2>", "<span>Hello</span>")
 						.delayElements(Duration.ofMillis(delay)));
 		// Is it possible to get a 500 from this?
 		model.addAttribute("flux.footer", Flux.error(new RuntimeException("bang!")));
