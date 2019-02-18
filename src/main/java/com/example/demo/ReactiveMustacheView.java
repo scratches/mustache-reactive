@@ -16,6 +16,7 @@
 
 package com.example.demo;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -85,10 +86,11 @@ public class ReactiveMustacheView extends MustacheView {
 			return Mono.error(new IllegalStateException(
 					"Could not find Mustache template with URL [" + getUrl() + "]"));
 		}
+		boolean sse = MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType);
 		Charset charset = getCharset(contentType).orElse(getDefaultCharset());
 		try (FluxWriter writer = new FluxWriter(
 				() -> exchange.getResponse().bufferFactory().allocateBuffer(), charset)) {
-			try (Reader reader = getReader(resource)) {
+			try (Reader reader = getReader(resource, sse)) {
 				Template template = this.compiler.compile(reader);
 				template.execute(model, writer);
 				return exchange.getResponse()
@@ -128,11 +130,23 @@ public class ReactiveMustacheView extends MustacheView {
 		return resource;
 	}
 
-	private Reader getReader(Resource resource) throws IOException {
+	private Reader getReader(Resource resource, boolean sse) throws IOException {
+		Reader result;
 		if (this.charset != null) {
-			return new InputStreamReader(resource.getInputStream(), this.charset);
+			result = new InputStreamReader(resource.getInputStream(), this.charset);
 		}
-		return new InputStreamReader(resource.getInputStream());
+		else {
+			result = new InputStreamReader(resource.getInputStream());
+		}
+		if (sse) {
+			Reader unclosed = sse(result);
+			result = unclosed;
+		}
+		return result;
+	}
+
+	private Reader sse(Reader result) {
+		return new SseTemplateReader(result);
 	}
 
 	private Optional<Charset> getCharset(MediaType mediaType) {
@@ -156,6 +170,83 @@ public class ReactiveMustacheView extends MustacheView {
 			}
 		}
 
+	}
+
+}
+
+class SseTemplateReader extends BufferedReader {
+
+	public SseTemplateReader(Reader in) {
+		super(new SseReader(in));
+	}
+
+	static class SseReader extends Reader {
+
+		private char[] line;
+		private String flux;
+		int pointer;
+		private BufferedReader origin;
+
+		public SseReader(Reader in) {
+			this.origin = new BufferedReader(in);
+		}
+
+		@Override
+		public void close() throws IOException {
+			origin.close();
+		}
+
+		public int read(char cbuf[], int off, int len) throws IOException {
+			int total = 0;
+			if (line == null) {
+				line = next();
+			}
+			int size = len;
+			while (line != null) {
+				if (size >= line.length - pointer) {
+					System.arraycopy(line, pointer, cbuf, off, line.length - pointer);
+					size -= line.length - pointer;
+					total += line.length - pointer;
+					off += line.length - pointer;
+					line = next();
+					pointer = 0;
+				}
+				else {
+					if (size > 0) {
+						System.arraycopy(line, pointer, cbuf, off, size);
+						total += size;
+						pointer += size;
+					}
+					// we wrote the whole buffer
+					break;
+				}
+			}
+			return total == 0 && line==null ? -1 : total;
+		}
+
+		private char[] next() throws IOException {
+			String line = origin.readLine();
+			if (this.line == null) {
+				while (line != null && line.trim().length() == 0) {
+					// first non-empty line
+					line = origin.readLine();
+				}
+				if (line != null) {
+					// first line
+					this.flux = line;
+					line = line + "\nevent: message\nid: {{id}}\n";
+				}
+			}
+			else if (flux != null && line != null
+					&& line.trim().equals(flux.replace("#", "/"))) {
+				// last line has 2 empty lines before it
+				line = "\n\n" + line + "\n";
+			}
+			else if (line != null) {
+				line = "data: " + line + "\n";
+			}
+			return line == null ? null : line.toCharArray();
+		}
 	}
 
 }
