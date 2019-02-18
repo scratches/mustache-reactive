@@ -1,0 +1,44 @@
+= Reactive Mustache
+
+Support for https://github.com/samskivert/jmustache[JMustache] templates in Webflux with reactive model elements. Template rendering is non-blocking.
+
+== Progressive Rendering
+
+A model element of type `Publisher` will be left in the model (instead of expanding it before the view is rendered). The `View` is then rendered and flushed to the HTTP response as soon as each element is published. Browsers are really good at rendering partially complete HTML, so the flux elements will most likely be visible to the user as soon as they are available. This is useful for rendering the "main" content of a page if it is a list or a table, for instance.
+
+== SSE Support
+
+To render a `View` with content type `text/event-stream` you need a model element of type `Publisher`, and also a template that starts and ends with that element. E.g. with an element called `flux.events` of type `Flux<Event>`:
+
+```
+{{#flux.events}}
+<div>
+  <span>Name: {{name}}<span>
+  <span>Value: {{value}}<span>
+</div>
+{{/flux.events}}
+```
+
+the output will be
+
+```
+event: message
+id: 0
+data: <div>
+data:   <span>Name: foo<span>
+data:   <span>Value: bar<span>
+data: </div>
+
+
+event: message
+id: 1
+data: <div>
+data:   <span>Name: spam<span>
+data:   <span>Value: bucket<span>
+data: </div>
+
+
+... etc.
+```
+
+assuming the `Event` object has fields `id`, `name`, `value`.
