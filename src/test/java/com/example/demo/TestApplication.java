@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.server.ServerWebExchange;
 
+import reactor.BlockHound;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -83,6 +84,7 @@ public class TestApplication {
 	}
 
 	public static void main(String[] args) {
+		BlockHound.install();
 		SpringApplication.run(TestApplication.class, args);
 	}
 }

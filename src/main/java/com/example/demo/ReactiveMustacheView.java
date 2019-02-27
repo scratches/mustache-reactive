@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import com.samskivert.mustache.Mustache;
 import com.samskivert.mustache.Mustache.Compiler;
@@ -42,6 +43,8 @@ import org.springframework.web.server.ServerWebExchange;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoSink;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Spring WebFlux {@link View} using the Mustache template engine.
@@ -88,13 +91,26 @@ public class ReactiveMustacheView extends MustacheView {
 		}
 		boolean sse = MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType);
 		Charset charset = getCharset(contentType).orElse(getDefaultCharset());
-		try (FluxWriter writer = new FluxWriter(
-				() -> exchange.getResponse().bufferFactory().allocateBuffer(), charset)) {
-			try (Reader reader = getReader(resource, sse)) {
-				Template template = this.compiler.compile(reader);
-				template.execute(model, writer);
-				return exchange.getResponse()
-						.writeAndFlushWith(Flux.from(writer.getBuffers()));
+		try {
+			FluxWriter writer = new FluxWriter(
+					() -> exchange.getResponse().bufferFactory().allocateBuffer(),
+					charset);
+			try {
+				Mono<Template> mono = Mono.create(sink -> Schedulers.elastic()
+						.schedule(() -> invoke(resource, sse, sink, template -> {
+							template.execute(model, writer);
+						})));
+				return mono
+						.thenEmpty(Mono.defer(() -> exchange.getResponse()
+								.writeAndFlushWith(Flux.from(writer.getBuffers()))))
+						.doOnTerminate(() -> {
+							try {
+								writer.close();
+							}
+							catch (IOException e) {
+								writer.release();
+							}
+						});
 			}
 			catch (Exception ex) {
 				writer.release();
@@ -103,6 +119,18 @@ public class ReactiveMustacheView extends MustacheView {
 		}
 		catch (Exception ex) {
 			return Mono.error(ex);
+		}
+	}
+
+	private void invoke(Resource resource, boolean sse, MonoSink<Template> sink,
+			Consumer<Template> renderer) {
+		try (Reader reader = getReader(resource, sse)) {
+			Template template = this.compiler.compile(reader);
+			renderer.accept(template);
+			sink.success(template);
+		}
+		catch (Exception ex) {
+			sink.error(ex);
 		}
 	}
 
@@ -221,7 +249,7 @@ class SseTemplateReader extends BufferedReader {
 					break;
 				}
 			}
-			return total == 0 && line==null ? -1 : total;
+			return total == 0 && line == null ? -1 : total;
 		}
 
 		private char[] next() throws IOException {
