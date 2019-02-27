@@ -91,34 +91,24 @@ public class ReactiveMustacheView extends MustacheView {
 		}
 		boolean sse = MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType);
 		Charset charset = getCharset(contentType).orElse(getDefaultCharset());
+		FluxWriter writer = new FluxWriter(
+				() -> exchange.getResponse().bufferFactory().allocateBuffer(), charset);
+		Mono<Template> mono = Mono.create(sink -> Schedulers.elastic()
+				.schedule(() -> invoke(resource, sse, sink, template -> {
+					template.execute(model, writer);
+				})));
+		return mono
+				.thenEmpty(Mono.defer(() -> exchange.getResponse()
+						.writeAndFlushWith(Flux.from(writer.getBuffers()))))
+				.doOnTerminate(() -> close(writer));
+	}
+
+	private void close(FluxWriter writer) {
 		try {
-			FluxWriter writer = new FluxWriter(
-					() -> exchange.getResponse().bufferFactory().allocateBuffer(),
-					charset);
-			try {
-				Mono<Template> mono = Mono.create(sink -> Schedulers.elastic()
-						.schedule(() -> invoke(resource, sse, sink, template -> {
-							template.execute(model, writer);
-						})));
-				return mono
-						.thenEmpty(Mono.defer(() -> exchange.getResponse()
-								.writeAndFlushWith(Flux.from(writer.getBuffers()))))
-						.doOnTerminate(() -> {
-							try {
-								writer.close();
-							}
-							catch (IOException e) {
-								writer.release();
-							}
-						});
-			}
-			catch (Exception ex) {
-				writer.release();
-				return Mono.error(ex);
-			}
+			writer.close();
 		}
-		catch (Exception ex) {
-			return Mono.error(ex);
+		catch (IOException e) {
+			writer.release();
 		}
 	}
 
