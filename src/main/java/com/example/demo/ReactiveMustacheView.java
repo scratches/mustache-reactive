@@ -26,7 +26,6 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Consumer;
 
 import com.samskivert.mustache.Mustache;
 import com.samskivert.mustache.Mustache.Compiler;
@@ -43,7 +42,6 @@ import org.springframework.web.server.ServerWebExchange;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
 import reactor.core.scheduler.Schedulers;
 
 /**
@@ -93,11 +91,10 @@ public class ReactiveMustacheView extends MustacheView {
 		Charset charset = getCharset(contentType).orElse(getDefaultCharset());
 		FluxWriter writer = new FluxWriter(
 				() -> exchange.getResponse().bufferFactory().allocateBuffer(), charset);
-		Mono<Template> mono = Mono.create(sink -> Schedulers.elastic()
-				.schedule(() -> invoke(resource, sse, sink, template -> {
-					template.execute(model, writer);
-				})));
-		return mono
+		Mono<Template> rendered = Mono.fromCallable(() -> compile(resource, sse))
+				.subscribeOn(Schedulers.elastic())
+				.doOnSuccess(template -> template.execute(model, writer));
+		return rendered
 				.thenEmpty(Mono.defer(() -> exchange.getResponse()
 						.writeAndFlushWith(Flux.from(writer.getBuffers()))))
 				.doOnTerminate(() -> close(writer));
@@ -112,15 +109,15 @@ public class ReactiveMustacheView extends MustacheView {
 		}
 	}
 
-	private void invoke(Resource resource, boolean sse, MonoSink<Template> sink,
-			Consumer<Template> renderer) {
-		try (Reader reader = getReader(resource, sse)) {
-			Template template = this.compiler.compile(reader);
-			renderer.accept(template);
-			sink.success(template);
+	private Template compile(Resource resource, boolean sse) {
+		try {
+			try (Reader reader = getReader(resource, sse)) {
+				Template template = this.compiler.compile(reader);
+				return template;
+			}
 		}
-		catch (Exception ex) {
-			sink.error(ex);
+		catch (IOException e) {
+			throw new IllegalStateException("Cannot close reader");
 		}
 	}
 
