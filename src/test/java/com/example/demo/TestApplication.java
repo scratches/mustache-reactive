@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +40,14 @@ public class TestApplication {
 		// TODO: Is it possible to get a 500 from this?
 		model.addAttribute("flux.footer", Flux.error(new RuntimeException("bang!")));
 		return "home";
+	}
+
+	@GetMapping(path = "/sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+	String sse(Model model) throws Exception {
+		model.addAttribute("flux.value",
+				Flux.just("<span>Hello</span>", "<span>World</span>")
+						.delayElements(Duration.ofMillis(delay)));
+		return "sse";
 	}
 
 	@GetMapping("/flux")

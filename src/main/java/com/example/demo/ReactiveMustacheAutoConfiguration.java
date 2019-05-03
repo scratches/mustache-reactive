@@ -1,5 +1,7 @@
 package com.example.demo;
 
+import java.util.Arrays;
+
 import com.samskivert.mustache.Mustache;
 import com.samskivert.mustache.Mustache.Compiler;
 
@@ -12,12 +14,13 @@ import org.springframework.boot.web.reactive.result.view.MustacheViewResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.http.MediaType;
 import org.springframework.web.reactive.result.view.AbstractUrlBasedView;
 
 import reactor.core.publisher.Flux;
 
 @Configuration
-@ConditionalOnClass({Mustache.class, Flux.class})
+@ConditionalOnClass({ Mustache.class, Flux.class })
 @AutoConfigureBefore(MustacheAutoConfiguration.class)
 public class ReactiveMustacheAutoConfiguration {
 
@@ -30,6 +33,11 @@ public class ReactiveMustacheAutoConfiguration {
 	@Bean
 	public MustacheViewResolver reactiveMustacheViewResolver() {
 		MustacheViewResolver resolver = new MustacheViewResolver(compiler) {
+			{
+				setSupportedMediaTypes(
+						Arrays.asList(MediaType.TEXT_HTML, MediaType.TEXT_EVENT_STREAM));
+			}
+
 			@Override
 			protected Class<?> requiredViewClass() {
 				return ReactiveMustacheView.class;

@@ -17,9 +17,11 @@
 package com.example.demo;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.io.StringWriter;
 import java.io.Writer;
 import java.nio.charset.Charset;
 import java.util.HashMap;
@@ -106,13 +108,21 @@ public class ReactiveMustacheView extends MustacheView {
 				() -> exchange.getResponse().bufferFactory().allocateBuffer(), charset);
 		Mono<Template> rendered;
 		if (!this.cache || !templates.containsKey(resource)) {
-			rendered = Mono.fromCallable(() -> compile(resource, sse))
+			rendered = Mono.fromCallable(() -> compile(resource))
 					.subscribeOn(Schedulers.elastic());
 		}
 		else {
 			rendered = Mono.just(templates.get(resource));
 		}
-		rendered = rendered.doOnSuccess(template -> template.execute(model, writer));
+		Map<String, Object> map;
+		if (sse) {
+			map = new HashMap<>(model);
+			map.put("ssedata", new SseLambda());
+		}
+		else {
+			map = model;
+		}
+		rendered = rendered.doOnSuccess(template -> template.execute(map, writer));
 		return rendered
 				.thenEmpty(Mono.defer(() -> exchange.getResponse()
 						.writeAndFlushWith(Flux.from(writer.getBuffers()))))
@@ -128,9 +138,9 @@ public class ReactiveMustacheView extends MustacheView {
 		}
 	}
 
-	private Template compile(Resource resource, boolean sse) {
+	private Template compile(Resource resource) {
 		try {
-			try (Reader reader = getReader(resource, sse)) {
+			try (Reader reader = getReader(resource)) {
 				Template template = this.compiler.compile(reader);
 				return template;
 			}
@@ -164,7 +174,7 @@ public class ReactiveMustacheView extends MustacheView {
 		return resource;
 	}
 
-	private Reader getReader(Resource resource, boolean sse) throws IOException {
+	private Reader getReader(Resource resource) throws IOException {
 		Reader result;
 		if (this.charset != null) {
 			result = new InputStreamReader(resource.getInputStream(), this.charset);
@@ -172,15 +182,7 @@ public class ReactiveMustacheView extends MustacheView {
 		else {
 			result = new InputStreamReader(resource.getInputStream());
 		}
-		if (sse) {
-			Reader unclosed = sse(result);
-			result = unclosed;
-		}
 		return result;
-	}
-
-	private Reader sse(Reader result) {
-		return new SseTemplateReader(result);
 	}
 
 	private Optional<Charset> getCharset(MediaType mediaType) {
@@ -197,90 +199,46 @@ public class ReactiveMustacheView extends MustacheView {
 
 		@Override
 		public void execute(Fragment frag, Writer out) throws IOException {
-			if (out instanceof FluxWriter) {
-				FluxWriter fluxWriter = (FluxWriter) out;
-				fluxWriter.flush();
-				fluxWriter.write(Flux.from(publisher).map(value -> frag.execute(value)));
+			try {
+				if (out instanceof FluxWriter) {
+					FluxWriter fluxWriter = (FluxWriter) out;
+					fluxWriter.flush();
+					fluxWriter.write(
+							Flux.from(publisher).map(value -> frag.execute(value)));
+				}
+			}
+			catch (IOException e) {
+				e.printStackTrace();
 			}
 		}
 
 	}
 
-}
-
-class SseTemplateReader extends BufferedReader {
-
-	public SseTemplateReader(Reader in) {
-		super(new SseReader(in));
-	}
-
-	static class SseReader extends Reader {
-
-		private char[] line;
-		private String flux;
-		int pointer;
-		private BufferedReader origin;
-
-		public SseReader(Reader in) {
-			this.origin = new BufferedReader(in);
-		}
+	private static class SseLambda implements Mustache.Lambda {
 
 		@Override
-		public void close() throws IOException {
-			origin.close();
+		public void execute(Fragment frag, Writer out) throws IOException {
+			try {
+				StringWriter writer = new StringWriter();
+				frag.execute(writer);
+				try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+						new ByteArrayInputStream(writer.toString().getBytes())))) {
+					reader.lines().forEach(line -> {
+						try {
+							out.write("data: " + line + "\n");
+						}
+						catch (IOException e) {
+							throw new IllegalStateException("Cannot write data", e);
+						}
+					});
+				}
+				out.write(new char[] { '\n', '\n' });
+			}
+			catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 
-		public int read(char cbuf[], int off, int len) throws IOException {
-			int total = 0;
-			if (line == null) {
-				line = next();
-			}
-			int size = len;
-			while (line != null) {
-				if (size >= line.length - pointer) {
-					System.arraycopy(line, pointer, cbuf, off, line.length - pointer);
-					size -= line.length - pointer;
-					total += line.length - pointer;
-					off += line.length - pointer;
-					line = next();
-					pointer = 0;
-				}
-				else {
-					if (size > 0) {
-						System.arraycopy(line, pointer, cbuf, off, size);
-						total += size;
-						pointer += size;
-					}
-					// we wrote the whole buffer
-					break;
-				}
-			}
-			return total == 0 && line == null ? -1 : total;
-		}
-
-		private char[] next() throws IOException {
-			String line = origin.readLine();
-			if (this.line == null) {
-				while (line != null && line.trim().length() == 0) {
-					// first non-empty line
-					line = origin.readLine();
-				}
-				if (line != null) {
-					// first line
-					this.flux = line;
-					line = line + "\nevent: message\nid: {{id}}\n";
-				}
-			}
-			else if (flux != null && line != null
-					&& line.trim().equals(flux.replace("#", "/"))) {
-				// last line has 2 empty lines before it
-				line = "\n\n" + line + "\n";
-			}
-			else if (line != null) {
-				line = "data: " + line + "\n";
-			}
-			return line == null ? null : line.toCharArray();
-		}
 	}
 
 }

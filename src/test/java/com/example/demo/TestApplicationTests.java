@@ -29,6 +29,14 @@ public class TestApplicationTests {
 	}
 
 	@Test
+	public void sse() {
+		client.get().uri("/sse").exchange() //
+				.expectBody(String.class).value(Matchers.containsString("event: message"))
+				.value(Matchers.containsString("\ndata: <span>Hello</span>"))
+				.value(Matchers.containsString("World")).value(Matchers.endsWith("\n\n"));
+	}
+
+	@Test
 	public void cache() {
 		boolean value = mustache.isCache();
 		mustache.setCache(true);
