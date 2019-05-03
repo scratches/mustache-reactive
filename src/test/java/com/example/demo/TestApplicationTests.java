@@ -5,6 +5,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.mustache.MustacheProperties;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.junit4.SpringRunner;
@@ -18,10 +19,24 @@ public class TestApplicationTests {
 	@Autowired
 	private WebTestClient client;
 
+	@Autowired
+	private MustacheProperties mustache;
+
 	@Test
 	public void home() {
 		client.get().uri("/").exchange().expectBody(String.class)
 				.value(Matchers.containsString("Hello"));
+	}
+
+	@Test
+	public void cache() {
+		boolean value = mustache.isCache();
+		mustache.setCache(true);
+		client.get().uri("/").exchange().expectBody(String.class)
+				.value(Matchers.containsString("Hello"));
+		client.get().uri("/").exchange().expectBody(String.class)
+				.value(Matchers.containsString("Hello"));
+		mustache.setCache(value);
 	}
 
 	@Test

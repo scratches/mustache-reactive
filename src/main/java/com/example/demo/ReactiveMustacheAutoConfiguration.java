@@ -41,6 +41,7 @@ public class ReactiveMustacheAutoConfiguration {
 						viewName);
 				view.setCompiler(compiler);
 				view.setCharset(mustache.getCharsetName());
+				view.setCache(ReactiveMustacheAutoConfiguration.this.mustache.isCache());
 				return view;
 			}
 		};

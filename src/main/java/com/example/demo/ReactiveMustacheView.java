@@ -56,6 +56,10 @@ public class ReactiveMustacheView extends MustacheView {
 
 	private String charset;
 
+	private static Map<Resource, Template> templates = new HashMap<>();
+
+	private boolean cache = true;
+
 	/**
 	 * Set the JMustache compiler to be used by this view. Typically this property is not
 	 * set directly. Instead a single {@link Compiler} is expected in the Spring
@@ -72,6 +76,15 @@ public class ReactiveMustacheView extends MustacheView {
 	 */
 	public void setCharset(String charset) {
 		this.charset = charset;
+	}
+
+	/**
+	 * Flag to indiciate that templates ought to be cached.
+	 * 
+	 * @param cache the flag value
+	 */
+	public void setCache(boolean cache) {
+		this.cache = cache;
 	}
 
 	@Override
@@ -91,9 +104,15 @@ public class ReactiveMustacheView extends MustacheView {
 		Charset charset = getCharset(contentType).orElse(getDefaultCharset());
 		FluxWriter writer = new FluxWriter(
 				() -> exchange.getResponse().bufferFactory().allocateBuffer(), charset);
-		Mono<Template> rendered = Mono.fromCallable(() -> compile(resource, sse))
-				.subscribeOn(Schedulers.elastic())
-				.doOnSuccess(template -> template.execute(model, writer));
+		Mono<Template> rendered;
+		if (!this.cache || !templates.containsKey(resource)) {
+			rendered = Mono.fromCallable(() -> compile(resource, sse))
+					.subscribeOn(Schedulers.elastic());
+		}
+		else {
+			rendered = Mono.just(templates.get(resource));
+		}
+		rendered = rendered.doOnSuccess(template -> template.execute(model, writer));
 		return rendered
 				.thenEmpty(Mono.defer(() -> exchange.getResponse()
 						.writeAndFlushWith(Flux.from(writer.getBuffers()))))
